@@ -1,0 +1,36 @@
+broker:
+  qmt_path: "C:/国金QMT交易端/userdata_mini"
+  account_id: ""
+  account_type: "STOCK"
+
+strategy:
+  underlying: "510300.SH"
+  vix_code: "000188.SH"
+  lookback_days: 252
+  iv_percentile:
+    buy_call: 10
+    sell_put: 90
+  price_percentile: 10
+  macd:
+    fast: 12
+    slow: 26
+    signal: 9
+    min_expand_days: 2
+  contract:
+    min_volume: 500
+    min_oi: 1000
+    target_delta: 0.5
+    days_to_expiry_range: [25, 35]
+  risk:
+    stop_loss: -0.50
+    take_profit: 0.80
+    margin_limit: 0.60
+    signal_cooldown_days: 3
+    expiry_warning_days: 3
+  cost:
+    commission_per_lot: 2.0
+    slippage_tick_buy: 1
+    slippage_tick_sell: 2
+  position:
+    size_fraction: 0.1
+  risk_free_rate: 0.02

@@ -1,0 +1,107 @@
+{% extends "base.html" %}
+{% block title %}回测报告{% endblock %}
+
+{% block body %}
+<div class="container">
+    <div class="page-header">
+        <h1>回测报告</h1>
+        <form action="/backtest/run" method="post" style="display:inline;">
+            <button type="submit" class="btn btn-primary">运行回测</button>
+        </form>
+    </div>
+
+    {% if result %}
+    <div class="grid-4">
+        <div class="card">
+            <h3>累计收益率</h3>
+            <div class="value {{ 'pnl-pos' if result.total_return >= 0 else 'pnl-neg' }}">
+                {{ "%.2f"|format(result.total_return * 100) }}%
+            </div>
+        </div>
+        <div class="card">
+            <h3>年化收益率</h3>
+            <div class="value {{ 'pnl-pos' if result.annual_return >= 0 else 'pnl-neg' }}">
+                {{ "%.2f"|format(result.annual_return * 100) }}%
+            </div>
+        </div>
+        <div class="card">
+            <h3>最大回撤</h3>
+            <div class="value pnl-neg">{{ "%.2f"|format(result.max_drawdown * 100) }}%</div>
+        </div>
+        <div class="card">
+            <h3>Calmar比率</h3>
+            <div class="value">{{ "%.2f"|format(result.calmar_ratio) }}</div>
+        </div>
+    </div>
+
+    <div class="grid-3">
+        <div class="card">
+            <h3>胜率</h3>
+            <div class="value">{{ "%.1f"|format(result.win_rate * 100) }}%</div>
+        </div>
+        <div class="card">
+            <h3>盈亏比</h3>
+            <div class="value">{{ "%.2f"|format(result.profit_loss_ratio) }}</div>
+        </div>
+        <div class="card">
+            <h3>交易次数</h3>
+            <div class="value">{{ result.total_trades }}</div>
+        </div>
+    </div>
+
+    {% if chart_url %}
+    <div class="card">
+        <h3>净值曲线 &amp; 回撤</h3>
+        <div class="chart-container">
+            <img src="{{ chart_url }}" alt="Equity Curve">
+        </div>
+    </div>
+    {% endif %}
+
+    {% if result.trades %}
+    <div class="card">
+        <h3>交易明细</h3>
+        <table>
+            <thead>
+                <tr>
+                    <th>开仓日</th>
+                    <th>平仓日</th>
+                    <th>信号</th>
+                    <th>开仓价</th>
+                    <th>平仓价</th>
+                    <th>数量</th>
+                    <th>盈亏</th>
+                    <th>盈亏%</th>
+                    <th>平仓原因</th>
+                </tr>
+            </thead>
+            <tbody>
+            {% for t in result.trades %}
+                <tr>
+                    <td>{{ t.entry_date }}</td>
+                    <td>{{ t.exit_date or '-' }}</td>
+                    <td>
+                        <span class="badge {{ 'badge-green' if t.signal_type == 'BUY_CALL' else 'badge-red' }}">
+                            {{ t.signal_type }}
+                        </span>
+                    </td>
+                    <td>{{ "%.4f"|format(t.entry_price) }}</td>
+                    <td>{{ "%.4f"|format(t.exit_price) }}</td>
+                    <td>{{ t.quantity }}</td>
+                    <td class="{{ 'pnl-pos' if t.pnl >= 0 else 'pnl-neg' }}">{{ "{:,.0f}".format(t.pnl) }}</td>
+                    <td class="{{ 'pnl-pos' if t.pnl_pct >= 0 else 'pnl-neg' }}">{{ "%.2f"|format(t.pnl_pct * 100) }}%</td>
+                    <td>{{ t.exit_reason }}</td>
+                </tr>
+            {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    {% endif %}
+
+    {% else %}
+    <div class="card" style="text-align:center; padding:60px;">
+        <p style="color:var(--text-muted); font-size:16px;">点击"运行回测"按钮生成报告</p>
+    </div>
+    {% endif %}
+</div>
+{% endblock %}

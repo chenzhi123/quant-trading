@@ -1,0 +1,25 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block title %}OptionGuard{% endblock %} - 期权纪律交易系统</title>
+    <link rel="stylesheet" href="/static/style.css">
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><text y='28' font-size='28'>&#x26E8;</text></svg>">
+    {% block head %}{% endblock %}
+</head>
+<body>
+    <nav>
+        <a href="/" class="logo">OptionGuard</a>
+        <a href="/" class="{{ 'active' if page == 'home' }}">首页</a>
+        <a href="/dashboard" class="{{ 'active' if page == 'dashboard' }}">仪表盘</a>
+        <a href="/signals" class="{{ 'active' if page == 'signals' }}">信号管理</a>
+        <a href="/positions" class="{{ 'active' if page == 'positions' }}">持仓监控</a>
+        <a href="/backtest" class="{{ 'active' if page == 'backtest' }}">回测报告</a>
+    </nav>
+
+    {% block body %}{% endblock %}
+
+    {% block scripts %}{% endblock %}
+</body>
+</html>

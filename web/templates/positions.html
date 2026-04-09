@@ -1,0 +1,173 @@
+{% extends "base.html" %}
+{% block title %}持仓监控{% endblock %}
+
+{% block body %}
+<div class="container">
+    <div class="page-header">
+        <h1>持仓监控</h1>
+        <button class="btn btn-primary" onclick="document.getElementById('addForm').style.display = document.getElementById('addForm').style.display === 'none' ? 'block' : 'none'">
+            手动录入持仓
+        </button>
+    </div>
+
+    <!-- 风控警告 -->
+    {% for event in risk_events %}
+    <div class="alert {{ 'alert-danger' if event.event_type.value in ['STOP_LOSS_TRIGGERED', 'MARGIN_LIMIT_BREACH'] else ('alert-success' if event.event_type.value == 'TAKE_PROFIT_TRIGGERED' else 'alert-warning') }}">
+        {{ event.message }}
+    </div>
+    {% endfor %}
+
+    <!-- 手动录入表单 -->
+    <div class="card" id="addForm" style="display:none;">
+        <h3>手动录入持仓</h3>
+        <form action="/positions/add" method="post" style="margin-top:12px;">
+            <div class="grid-3">
+                <div class="form-group">
+                    <label>合约代码</label>
+                    <input type="text" name="contract_code" placeholder="如 10001234.SHO" required
+                           style="width:100%; padding:8px; background:var(--bg); border:1px solid var(--border); border-radius:6px; color:var(--text);">
+                </div>
+                <div class="form-group">
+                    <label>方向</label>
+                    <select name="direction" style="width:100%; padding:8px; background:var(--bg); border:1px solid var(--border); border-radius:6px; color:var(--text);">
+                        <option value="LONG">LONG (多头/买入)</option>
+                        <option value="SHORT">SHORT (空头/卖出)</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label>开仓均价</label>
+                    <input type="number" step="0.0001" name="entry_price" placeholder="0.1500" required
+                           style="width:100%; padding:8px; background:var(--bg); border:1px solid var(--border); border-radius:6px; color:var(--text);">
+                </div>
+                <div class="form-group">
+                    <label>数量(张)</label>
+                    <input type="number" name="quantity" value="1" min="1" required
+                           style="width:100%; padding:8px; background:var(--bg); border:1px solid var(--border); border-radius:6px; color:var(--text);">
+                </div>
+                <div class="form-group">
+                    <label>到期日</label>
+                    <input type="date" name="expiry_date" required
+                           style="width:100%; padding:8px; background:var(--bg); border:1px solid var(--border); border-radius:6px; color:var(--text);">
+                </div>
+                <div class="form-group">
+                    <label>保证金 (卖方填写)</label>
+                    <input type="number" step="1" name="margin_used" value="0"
+                           style="width:100%; padding:8px; background:var(--bg); border:1px solid var(--border); border-radius:6px; color:var(--text);">
+                </div>
+            </div>
+            <div style="margin-top:12px;">
+                <button type="submit" class="btn btn-success">确认录入</button>
+                <button type="button" class="btn btn-outline" onclick="document.getElementById('addForm').style.display='none'">取消</button>
+            </div>
+        </form>
+    </div>
+
+    <!-- 账户概览 -->
+    <div class="grid-4">
+        <div class="card">
+            <h3>总资产</h3>
+            <div class="value">{{ "{:,.0f}".format(account.total_asset) }}</div>
+        </div>
+        <div class="card">
+            <h3>可用资金</h3>
+            <div class="value">{{ "{:,.0f}".format(account.cash) }}</div>
+        </div>
+        <div class="card">
+            <h3>持仓市值</h3>
+            <div class="value">{{ "{:,.0f}".format(account.market_value) }}</div>
+        </div>
+        <div class="card">
+            <h3>保证金占比</h3>
+            {% set margin_ratio = (total_margin / account.total_asset * 100) if account.total_asset > 0 else 0 %}
+            <div class="value {{ 'pnl-neg' if margin_ratio >= 60 else '' }}">{{ "%.1f"|format(margin_ratio) }}%</div>
+            <div class="percentile-bar">
+                <div class="percentile-fill {{ 'percentile-high' if margin_ratio >= 60 else ('percentile-mid' if margin_ratio >= 40 else 'percentile-low') }}"
+                     style="width: {{ [margin_ratio, 100] | min }}%"></div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 活跃持仓 -->
+    <div class="card">
+        <h3>活跃持仓</h3>
+        <table>
+            <thead>
+                <tr>
+                    <th>合约</th>
+                    <th>方向</th>
+                    <th>开仓价</th>
+                    <th>数量</th>
+                    <th>开仓日</th>
+                    <th>到期日</th>
+                    <th>剩余</th>
+                    <th>盈亏</th>
+                    <th>保证金</th>
+                    <th>操作</th>
+                </tr>
+            </thead>
+            <tbody>
+            {% for pos in positions %}
+                {% set days_left = (pos.expiry_date - today).days %}
+                <tr>
+                    <td style="font-weight:600;">{{ pos.contract_code }}</td>
+                    <td>
+                        <span class="badge {{ 'badge-green' if pos.direction.value == 'LONG' else 'badge-red' }}">
+                            {{ "多" if pos.direction.value == "LONG" else "空" }}
+                        </span>
+                    </td>
+                    <td>{{ "%.4f"|format(pos.entry_avg_price) }}</td>
+                    <td>{{ pos.quantity }}张</td>
+                    <td>{{ pos.entry_date }}</td>
+                    <td>{{ pos.expiry_date }}</td>
+                    <td class="{{ 'pnl-neg' if days_left <= 3 else '' }}">
+                        {{ days_left }}天
+                        {% if days_left <= 3 %}<span class="badge badge-red" style="margin-left:4px;">临近</span>{% endif %}
+                    </td>
+                    <td class="{{ 'pnl-pos' if pos.current_pnl_pct >= 0 else 'pnl-neg' }}" style="font-weight:700;">
+                        {{ "%.2f"|format(pos.current_pnl_pct * 100) }}%
+                    </td>
+                    <td>{{ "{:,.0f}".format(pos.margin_used) }}</td>
+                    <td>
+                        <form action="/positions/{{ pos.contract_code }}/close" method="post" style="display:inline;"
+                              onsubmit="return confirm('确认平仓？')">
+                            <button type="submit" class="btn btn-danger" style="padding:3px 10px;font-size:12px;">平仓</button>
+                        </form>
+                    </td>
+                </tr>
+            {% endfor %}
+            {% if not positions %}
+                <tr><td colspan="10" style="text-align:center; color:var(--text-muted); padding:40px;">暂无活跃持仓</td></tr>
+            {% endif %}
+            </tbody>
+        </table>
+    </div>
+
+    <!-- 已平仓记录 -->
+    {% if closed_positions %}
+    <div class="card">
+        <h3>已平仓记录</h3>
+        <table>
+            <thead>
+                <tr><th>合约</th><th>方向</th><th>开仓价</th><th>数量</th><th>开仓日</th><th>最终盈亏</th></tr>
+            </thead>
+            <tbody>
+            {% for pos in closed_positions %}
+                <tr>
+                    <td>{{ pos.contract_code }}</td>
+                    <td><span class="badge {{ 'badge-green' if pos.direction.value == 'LONG' else 'badge-red' }}">{{ "多" if pos.direction.value == "LONG" else "空" }}</span></td>
+                    <td>{{ "%.4f"|format(pos.entry_avg_price) }}</td>
+                    <td>{{ pos.quantity }}张</td>
+                    <td>{{ pos.entry_date }}</td>
+                    <td class="{{ 'pnl-pos' if pos.current_pnl_pct >= 0 else 'pnl-neg' }}">{{ "%.2f"|format(pos.current_pnl_pct * 100) }}%</td>
+                </tr>
+            {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    {% endif %}
+</div>
+
+<script>
+    setTimeout(() => location.reload(), 30000);
+</script>
+{% endblock %}

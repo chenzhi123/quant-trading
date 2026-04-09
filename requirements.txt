@@ -1,0 +1,16 @@
+xtquant
+pandas
+numpy
+scipy
+pydantic
+pyyaml
+fastapi
+uvicorn[standard]
+jinja2
+apscheduler
+loguru
+matplotlib
+pytest
+httpx
+python-multipart
+py_vollib

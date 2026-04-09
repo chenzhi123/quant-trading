@@ -1,0 +1,177 @@
+{% extends "base.html" %}
+{% block title %}仪表盘{% endblock %}
+
+{% block body %}
+<div class="container">
+    <div class="page-header">
+        <h1>实时行情概览</h1>
+        <div style="display:flex; gap:12px; align-items:center;">
+            <span class="meta">更新: {{ update_time }}</span>
+            <form action="/scan" method="post" style="display:inline;">
+                <button type="submit" class="btn btn-primary">立即扫描</button>
+            </form>
+        </div>
+    </div>
+
+    <!-- 状态概要 -->
+    <div class="grid-4">
+        <div class="card">
+            <h3>沪深300ETF</h3>
+            <div class="value">{{ "%.4f"|format(etf_price) if etf_price > 0 else "--" }}</div>
+            <div class="percentile-bar">
+                <div class="percentile-fill {{ 'percentile-low' if price_pct <= 30 else ('percentile-high' if price_pct >= 70 else 'percentile-mid') }}"
+                     style="width: {{ price_pct }}%"></div>
+            </div>
+            <small style="color: var(--text-muted);">价格分位: {{ "%.1f"|format(price_pct) }}%</small>
+        </div>
+
+        <div class="card">
+            <h3>iVIX波动率指数</h3>
+            <div class="value">{{ "%.2f"|format(vix_value) if vix_value > 0 else "--" }}</div>
+            <div class="percentile-bar">
+                <div class="percentile-fill {{ 'percentile-low' if vix_pct <= 30 else ('percentile-high' if vix_pct >= 70 else 'percentile-mid') }}"
+                     style="width: {{ vix_pct }}%"></div>
+            </div>
+            <small style="color: var(--text-muted);">波动率分位: {{ "%.1f"|format(vix_pct) }}%</small>
+        </div>
+
+        <div class="card">
+            <h3>MACD状态</h3>
+            <div class="value" style="margin-bottom:4px;">
+                {% if macd_trigger %}
+                    <span class="badge badge-green">翻红放大</span>
+                {% else %}
+                    <span class="badge badge-gray">未触发</span>
+                {% endif %}
+            </div>
+            <small style="color: var(--text-muted);">HIST值: {{ "%.6f"|format(macd_hist) }}</small>
+        </div>
+
+        <div class="card">
+            <h3>系统状态</h3>
+            <div style="display:flex; flex-direction:column; gap:6px; margin-top:8px;">
+                <div style="display:flex; justify-content:space-between;">
+                    <small style="color:var(--text-muted);">活跃持仓</small>
+                    <span class="badge badge-blue">{{ active_count }}</span>
+                </div>
+                <div style="display:flex; justify-content:space-between;">
+                    <small style="color:var(--text-muted);">待确认信号</small>
+                    <span class="badge {{ 'badge-orange' if pending_count > 0 else 'badge-gray' }}">{{ pending_count }}</span>
+                </div>
+                <div style="display:flex; justify-content:space-between;">
+                    <small style="color:var(--text-muted);">风控警告</small>
+                    <span class="badge {{ 'badge-red' if risk_events else 'badge-gray' }}">{{ risk_events|length }}</span>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 条件判断矩阵 -->
+    <div class="card">
+        <h3>开仓条件判断</h3>
+        <table style="margin-top:12px;">
+            <thead>
+                <tr>
+                    <th>信号类型</th>
+                    <th>iVIX分位 {{ "%.1f"|format(vix_pct) }}%</th>
+                    <th>价格分位 {{ "%.1f"|format(price_pct) }}%</th>
+                    <th>MACD翻红放大</th>
+                    <th>综合判定</th>
+                </tr>
+            </thead>
+            <tbody>
+                <tr>
+                    <td><span class="badge badge-green">BUY_CALL</span></td>
+                    <td class="{{ 'pnl-pos' if vix_pct <= 10 else 'pnl-neg' }}">{{ "≤10%" if vix_pct <= 10 else "未满足" }}</td>
+                    <td class="{{ 'pnl-pos' if price_pct <= 10 else 'pnl-neg' }}">{{ "≤10%" if price_pct <= 10 else "未满足" }}</td>
+                    <td class="{{ 'pnl-pos' if macd_trigger else 'pnl-neg' }}">{{ "是" if macd_trigger else "否" }}</td>
+                    <td>
+                        {% if vix_pct <= 10 and price_pct <= 10 and macd_trigger %}
+                            <span class="badge badge-green">触发</span>
+                        {% else %}
+                            <span class="badge badge-gray">未触发</span>
+                        {% endif %}
+                    </td>
+                </tr>
+                <tr>
+                    <td><span class="badge badge-red">SELL_PUT</span></td>
+                    <td class="{{ 'pnl-pos' if vix_pct >= 90 else 'pnl-neg' }}">{{ "≥90%" if vix_pct >= 90 else "未满足" }}</td>
+                    <td class="{{ 'pnl-pos' if price_pct <= 10 else 'pnl-neg' }}">{{ "≤10%" if price_pct <= 10 else "未满足" }}</td>
+                    <td style="color:var(--text-muted);">不要求</td>
+                    <td>
+                        {% if vix_pct >= 90 and price_pct <= 10 %}
+                            <span class="badge badge-red">触发</span>
+                        {% else %}
+                            <span class="badge badge-gray">未触发</span>
+                        {% endif %}
+                    </td>
+                </tr>
+            </tbody>
+        </table>
+    </div>
+
+    <!-- 最新信号 -->
+    {% if latest_signal %}
+    <div class="card" style="border-left: 4px solid {{ 'var(--green)' if latest_signal.type.value == 'BUY_CALL' else 'var(--red)' }};">
+        <h3>最新信号</h3>
+        <div class="grid-3" style="margin-top: 12px;">
+            <div>
+                <small style="color: var(--text-muted);">类型</small>
+                <div><span class="badge {{ 'badge-green' if latest_signal.type.value == 'BUY_CALL' else 'badge-red' }}">{{ latest_signal.type.value }}</span></div>
+            </div>
+            <div>
+                <small style="color: var(--text-muted);">合约</small>
+                <div>{{ latest_signal.contract_code }}</div>
+            </div>
+            <div>
+                <small style="color: var(--text-muted);">建议张数</small>
+                <div style="font-size:20px; font-weight:700;">{{ latest_signal.suggested_quantity }}</div>
+            </div>
+            <div>
+                <small style="color: var(--text-muted);">建议价</small>
+                <div>{{ "%.4f"|format(latest_signal.suggest_price) }}</div>
+            </div>
+            <div>
+                <small style="color: var(--text-muted);">止损 / 止盈</small>
+                <div>
+                    <span class="pnl-neg">{{ "%.4f"|format(latest_signal.stop_loss_price) }}</span>
+                    /
+                    <span class="pnl-pos">{{ "%.4f"|format(latest_signal.take_profit_price) }}</span>
+                </div>
+            </div>
+            <div>
+                <small style="color: var(--text-muted);">到期日</small>
+                <div>{{ latest_signal.expiry_date }}</div>
+            </div>
+        </div>
+        {% if latest_signal.status.value == 'PENDING' %}
+        <div style="margin-top: 16px; display: flex; gap: 12px;">
+            <form action="/signals/{{ latest_signal.id }}/action" method="post" style="display:inline;">
+                <input type="hidden" name="action" value="EXECUTED">
+                <button type="submit" class="btn btn-success">确认执行</button>
+            </form>
+            <form action="/signals/{{ latest_signal.id }}/action" method="post" style="display:inline;">
+                <input type="hidden" name="action" value="IGNORED">
+                <button type="submit" class="btn btn-outline">暂不执行</button>
+            </form>
+        </div>
+        {% else %}
+        <div style="margin-top:12px;">
+            <span class="badge {{ 'badge-green' if latest_signal.status.value == 'EXECUTED' else 'badge-gray' }}">{{ latest_signal.status.value }}</span>
+        </div>
+        {% endif %}
+    </div>
+    {% endif %}
+
+    <!-- 风控警告 -->
+    {% for event in risk_events %}
+    <div class="alert {{ 'alert-danger' if event.event_type.value in ['STOP_LOSS_TRIGGERED', 'MARGIN_LIMIT_BREACH'] else ('alert-success' if event.event_type.value == 'TAKE_PROFIT_TRIGGERED' else 'alert-warning') }}">
+        {{ event.message }}
+    </div>
+    {% endfor %}
+</div>
+
+<script>
+    setTimeout(() => location.reload(), 30000);
+</script>
+{% endblock %}

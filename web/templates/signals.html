@@ -1,0 +1,82 @@
+{% extends "base.html" %}
+{% block title %}信号管理{% endblock %}
+
+{% block body %}
+<div class="container">
+    <div class="page-header">
+        <h1>信号管理</h1>
+        <form action="/scan" method="post" style="display:inline;">
+            <button type="submit" class="btn btn-primary">立即扫描</button>
+        </form>
+    </div>
+
+    <div class="card">
+        <table>
+            <thead>
+                <tr>
+                    <th>时间</th>
+                    <th>类型</th>
+                    <th>合约</th>
+                    <th>建议价</th>
+                    <th>止损</th>
+                    <th>止盈</th>
+                    <th>张数</th>
+                    <th>到期日</th>
+                    <th>iVIX分位</th>
+                    <th>价格分位</th>
+                    <th>状态</th>
+                    <th>操作</th>
+                </tr>
+            </thead>
+            <tbody>
+            {% for s in signals %}
+                <tr>
+                    <td>{{ s.timestamp.strftime('%Y-%m-%d %H:%M') }}</td>
+                    <td>
+                        <span class="badge {{ 'badge-green' if s.type.value == 'BUY_CALL' else 'badge-red' }}">
+                            {{ s.type.value }}
+                        </span>
+                    </td>
+                    <td>{{ s.contract_code }}</td>
+                    <td>{{ "%.4f"|format(s.suggest_price) }}</td>
+                    <td class="pnl-neg">{{ "%.4f"|format(s.stop_loss_price) }}</td>
+                    <td class="pnl-pos">{{ "%.4f"|format(s.take_profit_price) }}</td>
+                    <td>{{ s.suggested_quantity }}</td>
+                    <td>{{ s.expiry_date }}</td>
+                    <td>{{ "%.1f"|format(s.trigger_reason.iv_percentile) }}%</td>
+                    <td>{{ "%.1f"|format(s.trigger_reason.price_percentile) }}%</td>
+                    <td>
+                        {% if s.status.value == 'PENDING' %}
+                            <span class="badge badge-orange">待确认</span>
+                        {% elif s.status.value == 'EXECUTED' %}
+                            <span class="badge badge-green">已执行</span>
+                        {% elif s.status.value == 'IGNORED' %}
+                            <span class="badge badge-gray">已忽略</span>
+                        {% else %}
+                            <span class="badge badge-gray">{{ s.status.value }}</span>
+                        {% endif %}
+                    </td>
+                    <td>
+                        {% if s.status.value == 'PENDING' %}
+                        <form action="/signals/{{ s.id }}/action" method="post" style="display:inline;">
+                            <input type="hidden" name="action" value="EXECUTED">
+                            <button type="submit" class="btn btn-success" style="padding:3px 8px;font-size:12px;">确认</button>
+                        </form>
+                        <form action="/signals/{{ s.id }}/action" method="post" style="display:inline;">
+                            <input type="hidden" name="action" value="IGNORED">
+                            <button type="submit" class="btn btn-outline" style="padding:3px 8px;font-size:12px;">跳过</button>
+                        </form>
+                        {% else %}
+                            -
+                        {% endif %}
+                    </td>
+                </tr>
+            {% endfor %}
+            {% if not signals %}
+                <tr><td colspan="12" style="text-align:center; color:var(--text-muted); padding:40px;">暂无信号记录</td></tr>
+            {% endif %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% endblock %}
