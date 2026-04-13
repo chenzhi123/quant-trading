@@ -11,10 +11,26 @@ from __future__ import annotations
 
 import os
 import sys
+from datetime import datetime, time
 from pathlib import Path
 
 import yaml
 from loguru import logger
+
+
+def is_trading_time() -> bool:
+    """判断当前是否在A股交易时段（含集合竞价）
+    上午 09:15 - 11:30
+    下午 13:00 - 15:00
+    仅工作日生效
+    """
+    now = datetime.now()
+    if now.weekday() >= 5:
+        return False
+    t = now.time()
+    morning = time(9, 15) <= t <= time(11, 30)
+    afternoon = time(13, 0) <= t <= time(15, 0)
+    return morning or afternoon
 
 ROOT = Path(__file__).parent
 LOG_DIR = ROOT / "logs"
@@ -142,7 +158,12 @@ def cmd_web(config: dict) -> None:
     slow_sec = refresh_cfg.get("slow_seconds", 60)
 
     def _refresh_fast():
-        """快速路径：实时行情 + 持仓盈亏更新"""
+        """快速路径：实时行情 + 持仓盈亏更新（仅交易时间执行）"""
+        trading_now = is_trading_time()
+        state.is_trading = trading_now
+        if not trading_now and dl.is_connected:
+            return
+
         try:
             etf_rt = dl.get_etf_realtime()
             state.etf_price = etf_rt.get("last", 0)
@@ -169,7 +190,10 @@ def cmd_web(config: dict) -> None:
             logger.error(f"快速行情刷新失败: {e}")
 
     def _refresh_slow():
-        """慢速路径：分位数 + MACD 指标计算"""
+        """慢速路径：分位数 + MACD 指标计算（仅交易时间执行）"""
+        if not is_trading_time() and dl.is_connected:
+            return
+
         try:
             vix_hist = dl.get_vix_history()
             etf_hist = dl.get_etf_history()

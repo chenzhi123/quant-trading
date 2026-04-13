@@ -8,6 +8,7 @@
         <div style="display:flex; gap:12px; align-items:center;">
             <span class="meta" id="update-time">更新: {{ update_time }}</span>
             <span id="ws-status" class="badge badge-gray" style="font-size:11px;">连接中...</span>
+            <span id="trading-status" class="badge badge-gray" style="font-size:11px;">检测中...</span>
             <form action="/scan" method="post" style="display:inline;">
                 <button type="submit" class="btn btn-primary">立即扫描</button>
             </form>
@@ -27,7 +28,7 @@
         </div>
 
         <div class="card">
-            <h3>iVIX波动率指数</h3>
+            <h3>中国波指(000803)</h3>
             <div class="value" id="vix-value">{{ "%.2f"|format(vix_value) if vix_value > 0 else "--" }}</div>
             <div class="percentile-bar">
                 <div class="percentile-fill percentile-mid" id="vix-pct-bar"
@@ -193,6 +194,16 @@
             var d = JSON.parse(e.data);
 
             document.getElementById('update-time').textContent = '更新: ' + d.update_time;
+
+            // 交易/休市状态
+            var ts = document.getElementById('trading-status');
+            if (d.is_trading) {
+                ts.textContent = '交易中';
+                ts.className = 'badge badge-green';
+            } else {
+                ts.textContent = '休市';
+                ts.className = 'badge badge-gray';
+            }
 
             // ETF
             var ep = document.getElementById('etf-price');

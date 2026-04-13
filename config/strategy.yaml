@@ -5,7 +5,7 @@ broker:
 
 strategy:
   underlying: "510300.SH"
-  vix_code: "000188.SH"
+  vix_code: "000803.SH"
   lookback_days: 252
   iv_percentile:
     buy_call: 10

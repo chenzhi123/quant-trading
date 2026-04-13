@@ -336,7 +336,7 @@ class DataLoader:
 
     def _mock_vix_realtime(self) -> float:
         import random
-        return round(18.5 + random.gauss(0, 0.3), 2)
+        return round(20.0 + random.gauss(0, 0.5), 2)
 
     def _mock_etf_history(self, days: int) -> pd.DataFrame:
         np.random.seed(42)
@@ -374,7 +374,7 @@ class DataLoader:
                     code = f"1000{i}{0 if opt_type == 'CALL' else 5}{exp.strftime('%y%m')}.SHO"
                     contracts.append(OptionContract(
                         contract_code=code,
-                        underlying="510300.SH",
+                        underlying=self.underlying,
                         opt_type=opt_type,
                         strike=strike,
                         expiry_date=exp,

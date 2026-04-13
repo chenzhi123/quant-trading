@@ -50,6 +50,7 @@ class AppState:
         self.vix_pct: float = 50.0
         self.macd_trigger: bool = False
         self.macd_hist: float = 0.0
+        self.is_trading: bool = False
 
         self.signal_engine: Optional[Any] = None
         self.risk_monitor: Optional[Any] = None
@@ -293,10 +294,12 @@ async def ws_market(websocket: WebSocket):
                 "active_positions": active_positions,
                 "risk_alerts": risk_alerts,
                 "pending_signals": len([s for s in state.signals if s.status == SignalStatus.PENDING]),
+                "is_trading": state.is_trading,
                 "update_time": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
             }
             await websocket.send_json(payload)
-            await asyncio.sleep(3)
+            interval = 3 if state.is_trading else 30
+            await asyncio.sleep(interval)
     except WebSocketDisconnect:
         pass
     except Exception:
