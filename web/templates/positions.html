@@ -5,17 +5,22 @@
 <div class="container">
     <div class="page-header">
         <h1>持仓监控</h1>
-        <button class="btn btn-primary" onclick="document.getElementById('addForm').style.display = document.getElementById('addForm').style.display === 'none' ? 'block' : 'none'">
-            手动录入持仓
-        </button>
+        <div style="display:flex; gap:12px; align-items:center;">
+            <span id="ws-status" class="badge badge-gray" style="font-size:11px;">连接中...</span>
+            <button class="btn btn-primary" onclick="document.getElementById('addForm').style.display = document.getElementById('addForm').style.display === 'none' ? 'block' : 'none'">
+                手动录入持仓
+            </button>
+        </div>
     </div>
 
     <!-- 风控警告 -->
+    <div id="risk-alerts">
     {% for event in risk_events %}
     <div class="alert {{ 'alert-danger' if event.event_type.value in ['STOP_LOSS_TRIGGERED', 'MARGIN_LIMIT_BREACH'] else ('alert-success' if event.event_type.value == 'TAKE_PROFIT_TRIGGERED' else 'alert-warning') }}">
         {{ event.message }}
     </div>
     {% endfor %}
+    </div>
 
     <!-- 手动录入表单 -->
     <div class="card" id="addForm" style="display:none;">
@@ -105,10 +110,10 @@
                     <th>操作</th>
                 </tr>
             </thead>
-            <tbody>
+            <tbody id="positions-tbody">
             {% for pos in positions %}
                 {% set days_left = (pos.expiry_date - today).days %}
-                <tr>
+                <tr data-contract="{{ pos.contract_code }}">
                     <td style="font-weight:600;">{{ pos.contract_code }}</td>
                     <td>
                         <span class="badge {{ 'badge-green' if pos.direction.value == 'LONG' else 'badge-red' }}">
@@ -119,11 +124,11 @@
                     <td>{{ pos.quantity }}张</td>
                     <td>{{ pos.entry_date }}</td>
                     <td>{{ pos.expiry_date }}</td>
-                    <td class="{{ 'pnl-neg' if days_left <= 3 else '' }}">
+                    <td class="{{ 'pnl-neg' if days_left <= 3 else '' }}" data-field="days-left">
                         {{ days_left }}天
                         {% if days_left <= 3 %}<span class="badge badge-red" style="margin-left:4px;">临近</span>{% endif %}
                     </td>
-                    <td class="{{ 'pnl-pos' if pos.current_pnl_pct >= 0 else 'pnl-neg' }}" style="font-weight:700;">
+                    <td class="{{ 'pnl-pos' if pos.current_pnl_pct >= 0 else 'pnl-neg' }}" style="font-weight:700;" data-field="pnl">
                         {{ "%.2f"|format(pos.current_pnl_pct * 100) }}%
                     </td>
                     <td>{{ "{:,.0f}".format(pos.margin_used) }}</td>
@@ -136,7 +141,7 @@
                 </tr>
             {% endfor %}
             {% if not positions %}
-                <tr><td colspan="10" style="text-align:center; color:var(--text-muted); padding:40px;">暂无活跃持仓</td></tr>
+                <tr id="empty-row"><td colspan="10" style="text-align:center; color:var(--text-muted); padding:40px;">暂无活跃持仓</td></tr>
             {% endif %}
             </tbody>
         </table>
@@ -166,8 +171,79 @@
     </div>
     {% endif %}
 </div>
+{% endblock %}
 
+{% block scripts %}
 <script>
-    setTimeout(() => location.reload(), 30000);
+(function() {
+    const proto = location.protocol === 'https:' ? 'wss:' : 'ws:';
+    let ws;
+    let reconnectDelay = 1000;
+
+    function connect() {
+        ws = new WebSocket(proto + '//' + location.host + '/ws/market');
+
+        ws.onopen = function() {
+            document.getElementById('ws-status').textContent = '实时';
+            document.getElementById('ws-status').className = 'badge badge-green';
+            reconnectDelay = 1000;
+        };
+
+        ws.onmessage = function(e) {
+            var d = JSON.parse(e.data);
+
+            // 实时更新持仓盈亏
+            var rows = document.querySelectorAll('#positions-tbody tr[data-contract]');
+            for (var i = 0; i < rows.length; i++) {
+                var code = rows[i].getAttribute('data-contract');
+                for (var j = 0; j < d.active_positions.length; j++) {
+                    var pos = d.active_positions[j];
+                    if (pos.contract_code === code) {
+                        var pnlCell = rows[i].querySelector('[data-field="pnl"]');
+                        if (pnlCell) {
+                            pnlCell.textContent = pos.current_pnl_pct.toFixed(2) + '%';
+                            pnlCell.className = (pos.current_pnl_pct >= 0 ? 'pnl-pos' : 'pnl-neg');
+                            pnlCell.style.fontWeight = '700';
+                        }
+                        var daysCell = rows[i].querySelector('[data-field="days-left"]');
+                        if (daysCell) {
+                            var dl = pos.days_left;
+                            daysCell.innerHTML = dl + '天' + (dl <= 3 ? ' <span class="badge badge-red" style="margin-left:4px;">临近</span>' : '');
+                            daysCell.className = dl <= 3 ? 'pnl-neg' : '';
+                        }
+                        break;
+                    }
+                }
+            }
+
+            // 风控警告实时更新
+            var alertBox = document.getElementById('risk-alerts');
+            if (d.risk_alerts.length > 0) {
+                var html = '';
+                for (var k = 0; k < d.risk_alerts.length; k++) {
+                    var a = d.risk_alerts[k];
+                    var cls = 'alert-warning';
+                    if (a.type === 'STOP_LOSS_TRIGGERED' || a.type === 'MARGIN_LIMIT_BREACH') cls = 'alert-danger';
+                    else if (a.type === 'TAKE_PROFIT_TRIGGERED') cls = 'alert-success';
+                    html += '<div class="alert ' + cls + '">' + a.message + '</div>';
+                }
+                alertBox.innerHTML = html;
+            } else {
+                alertBox.innerHTML = '';
+            }
+        };
+
+        ws.onclose = function() {
+            document.getElementById('ws-status').textContent = '已断开';
+            document.getElementById('ws-status').className = 'badge badge-red';
+            setTimeout(connect, reconnectDelay);
+            reconnectDelay = Math.min(reconnectDelay * 2, 30000);
+        };
+
+        ws.onerror = function() { ws.close(); };
+    }
+
+    connect();
+})();
 </script>
 {% endblock %}

@@ -137,14 +137,40 @@ def cmd_web(config: dict) -> None:
     state.backtest_engine = bt
     state.notifier = notifier
 
-    def _refresh_market_data():
-        """定时刷新实时行情到Web状态"""
+    refresh_cfg = config.get("strategy", {}).get("refresh_interval", {})
+    fast_sec = refresh_cfg.get("fast_seconds", 3)
+    slow_sec = refresh_cfg.get("slow_seconds", 60)
+
+    def _refresh_fast():
+        """快速路径：实时行情 + 持仓盈亏更新"""
         try:
             etf_rt = dl.get_etf_realtime()
             state.etf_price = etf_rt.get("last", 0)
-
             state.vix_value = dl.get_vix_realtime()
 
+            for pos in state.positions:
+                if pos.status.value == "ACTIVE":
+                    try:
+                        rt = dl.get_option_realtime(pos.contract_code)
+                        mid = (rt["bid1"] + rt["ask1"]) / 2 if rt["bid1"] > 0 else rt["last"]
+                        if mid > 0 and pos.entry_avg_price != 0:
+                            pos.current_pnl_pct = (mid - pos.entry_avg_price) / abs(pos.entry_avg_price)
+                    except Exception:
+                        pass
+
+            if state.risk_monitor and state.positions:
+                from models.dto import PositionStatus
+                active = [p for p in state.positions if p.status == PositionStatus.ACTIVE]
+                if active:
+                    state.risk_events = state.risk_monitor.check_all_positions(active, state.account)
+
+            state.account = dl.get_account_info()
+        except Exception as e:
+            logger.error(f"快速行情刷新失败: {e}")
+
+    def _refresh_slow():
+        """慢速路径：分位数 + MACD 指标计算"""
+        try:
             vix_hist = dl.get_vix_history()
             etf_hist = dl.get_etf_history()
 
@@ -154,15 +180,15 @@ def cmd_web(config: dict) -> None:
             state.macd_trigger = ie.get_latest_macd_trigger(etf_hist)
             hist_vals = ie.get_latest_hist_values(etf_hist, 1)
             state.macd_hist = hist_vals[0] if hist_vals else 0.0
-
-            state.account = dl.get_account_info()
         except Exception as e:
-            logger.error(f"行情刷新失败: {e}")
+            logger.error(f"慢速指标刷新失败: {e}")
 
-    _refresh_market_data()
+    _refresh_fast()
+    _refresh_slow()
 
     scheduler = BackgroundScheduler()
-    scheduler.add_job(_refresh_market_data, "interval", seconds=30, id="market_refresh")
+    scheduler.add_job(_refresh_fast, "interval", seconds=fast_sec, id="market_fast")
+    scheduler.add_job(_refresh_slow, "interval", seconds=slow_sec, id="market_slow")
     scheduler.start()
 
     host = os.environ.get("HOST", "0.0.0.0")

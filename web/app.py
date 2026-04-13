@@ -2,12 +2,13 @@
 
 from __future__ import annotations
 
+import asyncio
 import os
 from datetime import date, datetime
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
-from fastapi import FastAPI, Form, Request
+from fastapi import FastAPI, Form, Request, WebSocket, WebSocketDisconnect
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
@@ -255,3 +256,48 @@ async def api_signals():
 @app.get("/api/positions")
 async def api_positions():
     return [p.model_dump(mode="json") for p in state.positions]
+
+
+# ── WebSocket 实时推送 ──────────────────────────────────
+
+@app.websocket("/ws/market")
+async def ws_market(websocket: WebSocket):
+    await websocket.accept()
+    try:
+        while True:
+            active_positions = [
+                {
+                    "contract_code": p.contract_code,
+                    "direction": p.direction.value,
+                    "entry_avg_price": p.entry_avg_price,
+                    "current_pnl_pct": round(p.current_pnl_pct * 100, 2),
+                    "margin_used": p.margin_used,
+                    "days_left": (p.expiry_date - date.today()).days,
+                }
+                for p in state.positions
+                if p.status == PositionStatus.ACTIVE
+            ]
+
+            risk_alerts = [
+                {"type": e.event_type.value, "message": e.message}
+                for e in state.risk_events
+            ]
+
+            payload = {
+                "etf_price": round(state.etf_price, 4),
+                "vix_value": round(state.vix_value, 2),
+                "price_pct": round(state.price_pct, 2),
+                "vix_pct": round(state.vix_pct, 2),
+                "macd_trigger": state.macd_trigger,
+                "macd_hist": round(state.macd_hist, 6),
+                "active_positions": active_positions,
+                "risk_alerts": risk_alerts,
+                "pending_signals": len([s for s in state.signals if s.status == SignalStatus.PENDING]),
+                "update_time": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+            }
+            await websocket.send_json(payload)
+            await asyncio.sleep(3)
+    except WebSocketDisconnect:
+        pass
+    except Exception:
+        pass

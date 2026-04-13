@@ -323,10 +323,20 @@ class DataLoader:
     # ── 模拟数据（开发/测试用） ──────────────────────────────
 
     def _mock_etf_realtime(self) -> Dict[str, float]:
-        return {"last": 3.95, "bid1": 3.949, "ask1": 3.951, "volume": 50000000, "amount": 1e9}
+        import random
+        base = 3.95 + random.gauss(0, 0.005)
+        base = round(base, 4)
+        return {
+            "last": base,
+            "bid1": round(base - 0.001, 4),
+            "ask1": round(base + 0.001, 4),
+            "volume": 50000000 + random.randint(-5000000, 5000000),
+            "amount": 1e9,
+        }
 
     def _mock_vix_realtime(self) -> float:
-        return 18.5
+        import random
+        return round(18.5 + random.gauss(0, 0.3), 2)
 
     def _mock_etf_history(self, days: int) -> pd.DataFrame:
         np.random.seed(42)

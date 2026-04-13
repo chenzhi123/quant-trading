@@ -34,3 +34,6 @@ strategy:
   position:
     size_fraction: 0.1
   risk_free_rate: 0.02
+  refresh_interval:
+    fast_seconds: 3
+    slow_seconds: 60

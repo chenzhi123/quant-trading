@@ -6,7 +6,8 @@
     <div class="page-header">
         <h1>实时行情概览</h1>
         <div style="display:flex; gap:12px; align-items:center;">
-            <span class="meta">更新: {{ update_time }}</span>
+            <span class="meta" id="update-time">更新: {{ update_time }}</span>
+            <span id="ws-status" class="badge badge-gray" style="font-size:11px;">连接中...</span>
             <form action="/scan" method="post" style="display:inline;">
                 <button type="submit" class="btn btn-primary">立即扫描</button>
             </form>
@@ -17,34 +18,34 @@
     <div class="grid-4">
         <div class="card">
             <h3>沪深300ETF</h3>
-            <div class="value">{{ "%.4f"|format(etf_price) if etf_price > 0 else "--" }}</div>
+            <div class="value" id="etf-price">{{ "%.4f"|format(etf_price) if etf_price > 0 else "--" }}</div>
             <div class="percentile-bar">
-                <div class="percentile-fill {{ 'percentile-low' if price_pct <= 30 else ('percentile-high' if price_pct >= 70 else 'percentile-mid') }}"
+                <div class="percentile-fill percentile-mid" id="price-pct-bar"
                      style="width: {{ price_pct }}%"></div>
             </div>
-            <small style="color: var(--text-muted);">价格分位: {{ "%.1f"|format(price_pct) }}%</small>
+            <small style="color: var(--text-muted);">价格分位: <span id="price-pct-text">{{ "%.1f"|format(price_pct) }}</span>%</small>
         </div>
 
         <div class="card">
             <h3>iVIX波动率指数</h3>
-            <div class="value">{{ "%.2f"|format(vix_value) if vix_value > 0 else "--" }}</div>
+            <div class="value" id="vix-value">{{ "%.2f"|format(vix_value) if vix_value > 0 else "--" }}</div>
             <div class="percentile-bar">
-                <div class="percentile-fill {{ 'percentile-low' if vix_pct <= 30 else ('percentile-high' if vix_pct >= 70 else 'percentile-mid') }}"
+                <div class="percentile-fill percentile-mid" id="vix-pct-bar"
                      style="width: {{ vix_pct }}%"></div>
             </div>
-            <small style="color: var(--text-muted);">波动率分位: {{ "%.1f"|format(vix_pct) }}%</small>
+            <small style="color: var(--text-muted);">波动率分位: <span id="vix-pct-text">{{ "%.1f"|format(vix_pct) }}</span>%</small>
         </div>
 
         <div class="card">
             <h3>MACD状态</h3>
-            <div class="value" style="margin-bottom:4px;">
+            <div class="value" style="margin-bottom:4px;" id="macd-status">
                 {% if macd_trigger %}
                     <span class="badge badge-green">翻红放大</span>
                 {% else %}
                     <span class="badge badge-gray">未触发</span>
                 {% endif %}
             </div>
-            <small style="color: var(--text-muted);">HIST值: {{ "%.6f"|format(macd_hist) }}</small>
+            <small style="color: var(--text-muted);">HIST值: <span id="macd-hist">{{ "%.6f"|format(macd_hist) }}</span></small>
         </div>
 
         <div class="card">
@@ -52,15 +53,15 @@
             <div style="display:flex; flex-direction:column; gap:6px; margin-top:8px;">
                 <div style="display:flex; justify-content:space-between;">
                     <small style="color:var(--text-muted);">活跃持仓</small>
-                    <span class="badge badge-blue">{{ active_count }}</span>
+                    <span class="badge badge-blue" id="active-count">{{ active_count }}</span>
                 </div>
                 <div style="display:flex; justify-content:space-between;">
                     <small style="color:var(--text-muted);">待确认信号</small>
-                    <span class="badge {{ 'badge-orange' if pending_count > 0 else 'badge-gray' }}">{{ pending_count }}</span>
+                    <span class="badge badge-gray" id="pending-count">{{ pending_count }}</span>
                 </div>
                 <div style="display:flex; justify-content:space-between;">
                     <small style="color:var(--text-muted);">风控警告</small>
-                    <span class="badge {{ 'badge-red' if risk_events else 'badge-gray' }}">{{ risk_events|length }}</span>
+                    <span class="badge badge-gray" id="risk-count">{{ risk_events|length }}</span>
                 </div>
             </div>
         </div>
@@ -73,8 +74,8 @@
             <thead>
                 <tr>
                     <th>信号类型</th>
-                    <th>iVIX分位 {{ "%.1f"|format(vix_pct) }}%</th>
-                    <th>价格分位 {{ "%.1f"|format(price_pct) }}%</th>
+                    <th id="th-vix-pct">iVIX分位 {{ "%.1f"|format(vix_pct) }}%</th>
+                    <th id="th-price-pct">价格分位 {{ "%.1f"|format(price_pct) }}%</th>
                     <th>MACD翻红放大</th>
                     <th>综合判定</th>
                 </tr>
@@ -82,29 +83,17 @@
             <tbody>
                 <tr>
                     <td><span class="badge badge-green">BUY_CALL</span></td>
-                    <td class="{{ 'pnl-pos' if vix_pct <= 10 else 'pnl-neg' }}">{{ "≤10%" if vix_pct <= 10 else "未满足" }}</td>
-                    <td class="{{ 'pnl-pos' if price_pct <= 10 else 'pnl-neg' }}">{{ "≤10%" if price_pct <= 10 else "未满足" }}</td>
-                    <td class="{{ 'pnl-pos' if macd_trigger else 'pnl-neg' }}">{{ "是" if macd_trigger else "否" }}</td>
-                    <td>
-                        {% if vix_pct <= 10 and price_pct <= 10 and macd_trigger %}
-                            <span class="badge badge-green">触发</span>
-                        {% else %}
-                            <span class="badge badge-gray">未触发</span>
-                        {% endif %}
-                    </td>
+                    <td id="bc-vix" class="pnl-neg">未满足</td>
+                    <td id="bc-price" class="pnl-neg">未满足</td>
+                    <td id="bc-macd" class="pnl-neg">否</td>
+                    <td id="bc-result"><span class="badge badge-gray">未触发</span></td>
                 </tr>
                 <tr>
                     <td><span class="badge badge-red">SELL_PUT</span></td>
-                    <td class="{{ 'pnl-pos' if vix_pct >= 90 else 'pnl-neg' }}">{{ "≥90%" if vix_pct >= 90 else "未满足" }}</td>
-                    <td class="{{ 'pnl-pos' if price_pct <= 10 else 'pnl-neg' }}">{{ "≤10%" if price_pct <= 10 else "未满足" }}</td>
+                    <td id="sp-vix" class="pnl-neg">未满足</td>
+                    <td id="sp-price" class="pnl-neg">未满足</td>
                     <td style="color:var(--text-muted);">不要求</td>
-                    <td>
-                        {% if vix_pct >= 90 and price_pct <= 10 %}
-                            <span class="badge badge-red">触发</span>
-                        {% else %}
-                            <span class="badge badge-gray">未触发</span>
-                        {% endif %}
-                    </td>
+                    <td id="sp-result"><span class="badge badge-gray">未触发</span></td>
                 </tr>
             </tbody>
         </table>
@@ -163,15 +152,138 @@
     </div>
     {% endif %}
 
-    <!-- 风控警告 -->
+    <!-- 风控警告（WebSocket动态更新） -->
+    <div id="risk-alerts">
     {% for event in risk_events %}
     <div class="alert {{ 'alert-danger' if event.event_type.value in ['STOP_LOSS_TRIGGERED', 'MARGIN_LIMIT_BREACH'] else ('alert-success' if event.event_type.value == 'TAKE_PROFIT_TRIGGERED' else 'alert-warning') }}">
         {{ event.message }}
     </div>
     {% endfor %}
+    </div>
 </div>
+{% endblock %}
 
+{% block scripts %}
 <script>
-    setTimeout(() => location.reload(), 30000);
+(function() {
+    const proto = location.protocol === 'https:' ? 'wss:' : 'ws:';
+    let ws;
+    let reconnectDelay = 1000;
+
+    function pctClass(bar, val, lowThresh, highThresh) {
+        bar.className = 'percentile-fill ' +
+            (val <= lowThresh ? 'percentile-low' : (val >= highThresh ? 'percentile-high' : 'percentile-mid'));
+    }
+
+    function condCell(el, ok, label) {
+        el.textContent = ok ? label : '未满足';
+        el.className = ok ? 'pnl-pos' : 'pnl-neg';
+    }
+
+    function connect() {
+        ws = new WebSocket(proto + '//' + location.host + '/ws/market');
+
+        ws.onopen = function() {
+            document.getElementById('ws-status').textContent = '实时';
+            document.getElementById('ws-status').className = 'badge badge-green';
+            reconnectDelay = 1000;
+        };
+
+        ws.onmessage = function(e) {
+            var d = JSON.parse(e.data);
+
+            document.getElementById('update-time').textContent = '更新: ' + d.update_time;
+
+            // ETF
+            var ep = document.getElementById('etf-price');
+            ep.textContent = d.etf_price > 0 ? d.etf_price.toFixed(4) : '--';
+
+            // VIX
+            var vv = document.getElementById('vix-value');
+            vv.textContent = d.vix_value > 0 ? d.vix_value.toFixed(2) : '--';
+
+            // 分位数条
+            var ppBar = document.getElementById('price-pct-bar');
+            ppBar.style.width = d.price_pct + '%';
+            pctClass(ppBar, d.price_pct, 30, 70);
+            document.getElementById('price-pct-text').textContent = d.price_pct.toFixed(1);
+
+            var vpBar = document.getElementById('vix-pct-bar');
+            vpBar.style.width = d.vix_pct + '%';
+            pctClass(vpBar, d.vix_pct, 30, 70);
+            document.getElementById('vix-pct-text').textContent = d.vix_pct.toFixed(1);
+
+            // MACD
+            var ms = document.getElementById('macd-status');
+            if (d.macd_trigger) {
+                ms.innerHTML = '<span class="badge badge-green">翻红放大</span>';
+            } else {
+                ms.innerHTML = '<span class="badge badge-gray">未触发</span>';
+            }
+            document.getElementById('macd-hist').textContent = d.macd_hist.toFixed(6);
+
+            // 系统状态
+            document.getElementById('active-count').textContent = d.active_positions.length;
+            var pc = document.getElementById('pending-count');
+            pc.textContent = d.pending_signals;
+            pc.className = 'badge ' + (d.pending_signals > 0 ? 'badge-orange' : 'badge-gray');
+            var rc = document.getElementById('risk-count');
+            rc.textContent = d.risk_alerts.length;
+            rc.className = 'badge ' + (d.risk_alerts.length > 0 ? 'badge-red' : 'badge-gray');
+
+            // 条件矩阵表头
+            document.getElementById('th-vix-pct').textContent = 'iVIX分位 ' + d.vix_pct.toFixed(1) + '%';
+            document.getElementById('th-price-pct').textContent = '价格分位 ' + d.price_pct.toFixed(1) + '%';
+
+            // BUY_CALL 条件
+            condCell(document.getElementById('bc-vix'), d.vix_pct <= 10, '≤10%');
+            condCell(document.getElementById('bc-price'), d.price_pct <= 10, '≤10%');
+            var bcMacd = document.getElementById('bc-macd');
+            bcMacd.textContent = d.macd_trigger ? '是' : '否';
+            bcMacd.className = d.macd_trigger ? 'pnl-pos' : 'pnl-neg';
+            var bcOk = d.vix_pct <= 10 && d.price_pct <= 10 && d.macd_trigger;
+            document.getElementById('bc-result').innerHTML = bcOk
+                ? '<span class="badge badge-green">触发</span>'
+                : '<span class="badge badge-gray">未触发</span>';
+
+            // SELL_PUT 条件
+            condCell(document.getElementById('sp-vix'), d.vix_pct >= 90, '≥90%');
+            condCell(document.getElementById('sp-price'), d.price_pct <= 10, '≤10%');
+            var spOk = d.vix_pct >= 90 && d.price_pct <= 10;
+            document.getElementById('sp-result').innerHTML = spOk
+                ? '<span class="badge badge-red">触发</span>'
+                : '<span class="badge badge-gray">未触发</span>';
+
+            // 风控警告
+            var alertBox = document.getElementById('risk-alerts');
+            if (d.risk_alerts.length > 0) {
+                var html = '';
+                for (var i = 0; i < d.risk_alerts.length; i++) {
+                    var a = d.risk_alerts[i];
+                    var cls = 'alert-warning';
+                    if (a.type === 'STOP_LOSS_TRIGGERED' || a.type === 'MARGIN_LIMIT_BREACH') cls = 'alert-danger';
+                    else if (a.type === 'TAKE_PROFIT_TRIGGERED') cls = 'alert-success';
+                    html += '<div class="alert ' + cls + '">' + a.message + '</div>';
+                }
+                alertBox.innerHTML = html;
+            } else {
+                alertBox.innerHTML = '';
+            }
+        };
+
+        ws.onclose = function() {
+            document.getElementById('ws-status').textContent = '已断开';
+            document.getElementById('ws-status').className = 'badge badge-red';
+            setTimeout(connect, reconnectDelay);
+            reconnectDelay = Math.min(reconnectDelay * 2, 30000);
+        };
+
+        ws.onerror = function() {
+            ws.close();
+        };
+    }
+
+    connect();
+})();
 </script>
 {% endblock %}
